@@ -1,0 +1,86 @@
+import os
+import shutil
+import time
+from time import sleep
+import csv
+import openai
+from PIL import Image as resi
+import json
+from youtubesearchpython import VideosSearch
+import requests
+import base64
+from bing_image_urls import bing_image_urls
+from PIL import Image, UnidentifiedImageError
+from requests.exceptions import ConnectTimeout
+from PIL import Image, UnidentifiedImageError
+
+website_url = "https://dsfd.com/"
+website_pass ="hS1H bLvj jtfsdfbxm 4w43"
+user_admin = "admin"
+
+
+
+
+
+
+
+def headerss(wp_user, wp_pass):
+
+    wp_credential = f'{wp_user}:{wp_pass}'
+    wp_token = base64.b64encode(wp_credential.encode())
+    wp_header = {'Authorization': f'Basic {wp_token.decode("utf-8")}'}
+    return wp_header
+def pexels(query, x):
+    try:
+        simage = bing_image_urls(query, limit=10)
+        all_imgs = [url for url in simage if url.lower().endswith('.jpg')]
+
+        valid_urls = []
+        for url in all_imgs:
+            try:
+                response = requests.head(url, allow_redirects=False, timeout=10)
+                if response.status_code == 200:
+                    valid_urls.append(url)
+            except requests.exceptions.RequestException as e:
+                f = (f"Error checking URL {url}: {e}")
+        # print(valid_urls)
+        select_img = valid_urls[x]
+        response = requests.get(select_img, timeout=10) # increase timeout value as required
+        if response.status_code == 302:
+            redirect_url = response.headers['Location']
+            response = requests.get(redirect_url, timeout=10) # send new request to the redirect location
+    except (IndexError, ConnectTimeout, requests.exceptions.RequestException) as e:
+        a=(f"Error: {str(e)}")
+        return None, None
+
+    try:
+        if not os.path.exists('img'):
+            os.makedirs('img')
+        if isinstance(response, str):
+            raise ValueError("Response is not a requests.Response object.")
+        else:
+            with open('img/' + query + ".jpg", "wb") as local_file:
+                local_file.write(response.content)
+        image = resi.open('img/' + query + ".jpg")
+        image = image.resize((640, 360))
+        image = image.convert("RGB")
+        image.save('img/' + query + ".webp", "webp")
+        header = headerss(user_admin, website_pass)
+        url = f'{website_url}wp-json/wp/v2/media'
+        image_file = open('img/' + query + ".webp", 'rb')
+        payload = {'file': ('img/' + query + ".webp", image_file)}
+        response = requests.post(url, headers=header, files=payload).json()
+        wp_image_id = response.get('id')
+        wp_image_ulr = response.get('guid').get('rendered')
+        image_file.close()
+    except UnidentifiedImageError:
+        # print("Error: Unable to identify image file format.")
+        wp_image_id = None
+        wp_image_ulr = None
+    except ValueError as e:
+        t=(str(e))
+        wp_image_id = None
+        wp_image_ulr = None
+    img_dir = 'img'
+    shutil.rmtree(img_dir)
+    return wp_image_id, wp_image_ulr
